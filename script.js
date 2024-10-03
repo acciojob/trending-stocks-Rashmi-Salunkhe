@@ -1,52 +1,56 @@
 async function trendingStocks(n) {
-    // If n is 0, we return an empty array as there's no data to fetch.
-    if (n === 0) {
-        return [];
-    }
+    if (n === 0) return [];
 
     // Fetch the stock symbols (name and symbol) from the symbols API.
-    const symbolsResponse = await fetch('https://api.frontendexpert.io/api/fe/stock-symbols');
-    const symbolsData = await symbolsResponse.json();
-    
-    // Slice the symbols array to get only the top n stocks.
-    const topSymbols = symbolsData.slice(0, n);
+    try {
+        const symbolsResponse = await fetch('https://api.frontendexpert.io/api/fe/stock-symbols');
+        if (!symbolsResponse.ok) {
+            console.error(`Error fetching symbols: ${symbolsResponse.status}`);
+        }
+        const symbolsData = await symbolsResponse.json();
 
-    // Extract the list of symbols to use in the other two API calls.
-    const symbols = topSymbols.map(stock => stock.symbol);
+        // Continue with fetching prices and market caps
+        const topSymbols = symbolsData.slice(0, n);
+        const symbols = topSymbols.map(stock => stock.symbol);
 
-    // Fetch the stock prices and market caps in parallel.
-    const pricesPromise = fetch(`https://api.frontendexpert.io/api/fe/stock-prices?symbols=${JSON.stringify(symbols)}`);
-    const marketCapsPromise = fetch('https://api.frontendexpert.io/api/fe/stock-market-caps');
+        // Fetch prices and market caps in parallel
+        const pricesPromise = fetch(`https://api.frontendexpert.io/api/fe/stock-prices?symbols=${JSON.stringify(symbols)}`);
+        const marketCapsPromise = fetch('https://api.frontendexpert.io/api/fe/stock-market-caps');
 
-    // Wait for both fetch requests to complete.
-    const [pricesResponse, marketCapsResponse] = await Promise.all([pricesPromise, marketCapsPromise]);
+        const [pricesResponse, marketCapsResponse] = await Promise.all([pricesPromise, marketCapsPromise]);
 
-    // Parse the responses as JSON.
-    const pricesData = await pricesResponse.json();
-    const marketCapsData = await marketCapsResponse.json();
+        // Check for errors in the responses
+        if (!pricesResponse.ok) {
+            console.error(`Error fetching prices: ${pricesResponse.status}`);
+        }
+        if (!marketCapsResponse.ok) {
+            console.error(`Error fetching market caps: ${marketCapsResponse.status}`);
+        }
 
-    // Create a map for easy lookup of market-cap and prices by symbol.
-    const marketCapsMap = new Map();
-    marketCapsData.forEach(stock => marketCapsMap.set(stock.symbol, stock['market-cap']));
+        const pricesData = await pricesResponse.json();
+        const marketCapsData = await marketCapsResponse.json();
 
-    const pricesMap = new Map();
-    pricesData.forEach(stock => pricesMap.set(stock.symbol, {
-        price: stock.price,
-        '52-week-high': stock['52-week-high'],
-        '52-week-low': stock['52-week-low']
-    }));
+        const marketCapsMap = new Map();
+        marketCapsData.forEach(stock => marketCapsMap.set(stock.symbol, stock['market-cap']));
 
-    // Merge the data from symbols, prices, and market caps.
-    const result = topSymbols.map(stock => ({
-        name: stock.name,
-        symbol: stock.symbol,
-        price: pricesMap.get(stock.symbol)?.price || null,
-        '52-week-high': pricesMap.get(stock.symbol)?.['52-week-high'] || null,
-        '52-week-low': pricesMap.get(stock.symbol)?.['52-week-low'] || null,
-        'market-cap': marketCapsMap.get(stock.symbol) || null
-    }));
+        const pricesMap = new Map();
+        pricesData.forEach(stock => pricesMap.set(stock.symbol, {
+            price: stock.price,
+            '52-week-high': stock['52-week-high'],
+            '52-week-low': stock['52-week-low']
+        }));
 
-    return result;
+        const result = topSymbols.map(stock => ({
+            name: stock.name,
+            symbol: stock.symbol,
+            price: pricesMap.get(stock.symbol)?.price || null,
+            '52-week-high': pricesMap.get(stock.symbol)?.['52-week-high'] || null,
+            '52-week-low': pricesMap.get(stock.symbol)?.['52-week-low'] || null,
+            'market-cap': marketCapsMap.get(stock.symbol) || null
+        }));
+
+        return result;
+    } catch (error) {
+        console.error("Fetch failed:", error);
+    }
 }
-
-module.exports = trendingStocks;
